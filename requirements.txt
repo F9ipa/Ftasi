@@ -1,6 +1,4 @@
-flask
-yfinance
+streamlit
 pandas
 numpy
-pandas_ta
-gunicorn
+yfinance
