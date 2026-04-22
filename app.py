@@ -1,69 +1,63 @@
-import yfinance as yf
-import pandas as pd
-from flask import Flask, render_template, request
 import os
-from concurrent.futures import ThreadPoolExecutor
+from flask import Flask, render_template
+import yfinance as yf
+import pandas_ta as ta
 
 app = Flask(__name__)
 
-def calculate_wavetrend(df):
-    if len(df) < 40: return None, None
-    ap = (df['High'] + df['Low'] + df['Close']) / 3
-    esa = ap.ewm(span=10, adjust=False).mean()
-    d = abs(ap - esa).ewm(span=10, adjust=False).mean()
-    ci = (ap - esa) / (0.015 * d)
-    wt1 = ci.ewm(span=21, adjust=False).mean()
-    wt2 = wt1.rolling(window=4).mean()
-    return wt1, wt2
+# قائمة الأسهم - يمكنك زيادتها لـ 200 (لاحظ إضافة .SR للسوق السعودي)
+SYMBOLS = ["2222.SR", "1120.SR", "7010.SR", "1150.SR", "4030.SR", "AAPL", "NVDA", "TSLA"]
 
-def scan_single_stock(t, interval):
-    """وظيفة لفحص سهم واحد فقط، سيتم استدعاؤها بالتوازي"""
+def get_wavetrend_signals(symbol, interval):
     try:
-        data = yf.download(t, period="1y", interval=interval, progress=False, threads=False)
-        if len(data) < 10: return None
+        # جلب البيانات
+        period = "2y" if interval == "1mo" else "1y"
+        df = yf.download(symbol, period=period, interval=interval, progress=False)
         
-        wt1, wt2 = calculate_wavetrend(data)
-        if wt1 is None or pd.isna(wt1.iloc[-1]): return None
+        if df.empty or len(df) < 30:
+            return False, 0
         
-        w1_now, w2_now = wt1.iloc[-1], wt2.iloc[-1]
-        w1_prev, w2_prev = wt1.iloc[-2], wt2.iloc[-2]
+        # معادلة WaveTrend
+        ap = (df['High'] + df['Low'] + df['Close']) / 3
+        esa = ta.ema(ap, length=10)
+        d = ta.ema(abs(ap - esa), length=10)
+        ci = (ap - esa) / (0.015 * d)
+        wt1 = ta.ema(ci, length=21)
+        wt2 = ta.sma(wt1, length=4)
         
-        symbol = t.split('.')[0]
-        if w1_prev <= w2_prev and w1_now > w2_now:
-            return ('pos', symbol)
-        elif w1_prev >= w2_prev and w1_now < w2_now:
-            return ('neg', symbol)
+        # الشروط: تقاطع إيجابي أو استمرار الإيجابية فوق خط الـ 0
+        last_wt1 = wt1.iloc[-1]
+        last_wt2 = wt2.iloc[-1]
+        prev_wt1 = wt1.iloc[-2]
+        prev_wt2 = wt2.iloc[-2]
+        
+        # شرط التقاطع (Cross Up)
+        is_crossing = prev_wt1 <= prev_wt2 and last_wt1 > last_wt2
+        # أو شرط الإيجابية العامة (أن يكون الأخضر فوق الأحمر)
+        is_bullish = last_wt1 > last_wt2
+        
+        return is_bullish, round(float(df['Close'].iloc[-1]), 2)
     except:
-        pass
-    return None
-
-def get_all_signals(interval):
-    try:
-        with open('stocks.txt', 'r') as f:
-            tickers = [line.strip() for line in f if line.strip()]
-    except:
-        return [], []
-
-    pos_signals, neg_signals = [], []
-    
-    # استخدام ThreadPoolExecutor لتشغيل الفحص بالتوازي (15 خيط معالجة)
-    with ThreadPoolExecutor(max_workers=15) as executor:
-        results = list(executor.map(lambda t: scan_single_stock(t, interval), tickers))
-    
-    # تصنيف النتائج
-    for res in results:
-        if res:
-            if res[0] == 'pos': pos_signals.append(res[1])
-            else: neg_signals.append(res[1])
-            
-    return pos_signals, neg_signals
+        return False, 0
 
 @app.route('/')
 def index():
-    interval = request.args.get('interval', '1d')
-    pos, neg = get_all_signals(interval)
-    return render_template('index.html', pos=pos, neg=neg, interval=interval)
+    results = []
+    for sym in SYMBOLS:
+        w_status, price = get_wavetrend_signals(sym, "1wk")
+        m_status, _ = get_wavetrend_signals(sym, "1mo")
+        
+        # إذا كان السهم إيجابي على أي من الفريمين يظهر في القائمة
+        if w_status or m_status:
+            results.append({
+                "symbol": sym,
+                "price": price,
+                "weekly": "إيجابي ✅" if w_status else "انتظار",
+                "monthly": "إيجابي ✅" if m_status else "انتظار"
+            })
+    return render_template('index.html', stocks=results)
 
 if __name__ == "__main__":
+    # Render يتطلب الاستماع على المنفذ المخصص عبر البيئة
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
