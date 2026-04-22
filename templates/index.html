@@ -3,124 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مراقب تاسي الذكي - 269 شركة</title>
+    <title>رادار اختراقات تاسي</title>
     <style>
-        :root { 
-            --bg: #0f172a; --card: #1e293b; --text: #f8fafc; 
-            --accent: #38bdf8; --up: #4ade80; --down: #f87171; 
-        }
-        body { 
-            font-family: system-ui, -apple-system, sans-serif; 
-            background: var(--bg); color: var(--text); 
-            margin: 0; padding: 10px; 
-        }
-        .header { 
-            text-align: center; padding: 15px; 
-            background: var(--card); border-radius: 12px; 
-            margin-bottom: 10px; border: 1px solid #334155; 
-        }
-        .search-box { 
-            width: 100%; padding: 15px; 
-            background: var(--card); border: 1px solid #334155; 
-            border-radius: 10px; color: white; 
-            margin-bottom: 10px; box-sizing: border-box; 
-            font-size: 16px; outline: none; 
-        }
-        table { 
-            width: 100%; border-collapse: collapse; 
-            background: var(--card); border-radius: 12px; 
-            overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        th { 
-            background: #1e293b; padding: 12px; 
-            color: #94a3b8; font-size: 13px; 
-            border-bottom: 1px solid #334155; 
-        }
-        td { 
-            padding: 14px 10px; border-bottom: 1px solid #0f172a; 
-            text-align: center; font-size: 15px;
-        }
-        .symbol { color: var(--accent); font-weight: bold; }
-        .up-val { color: var(--up); font-weight: bold; }
-        .down-val { color: var(--down); font-weight: bold; }
-        #loader { 
-            text-align: center; padding: 50px 20px; 
-            color: var(--accent); font-weight: 500;
-        }
+        :root { --bg: #020617; --card: #0f172a; --gold: #f59e0b; --text: #f1f5f9; }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        .radar-header { text-align: center; padding: 20px; background: var(--card); border-radius: 15px; border: 1px solid var(--gold); margin-bottom: 20px; }
+        .counter { font-size: 40px; font-weight: bold; color: var(--gold); margin: 10px 0; }
+        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
+        th { background: #1e293b; padding: 12px; color: #94a3b8; font-size: 13px; }
+        td { padding: 16px 10px; border-bottom: 1px solid #1e293b; text-align: center; }
+        .sym { font-weight: bold; color: #38bdf8; }
+        .change { font-weight: bold; }
+        #loader { text-align: center; padding: 50px; color: var(--gold); }
+        .no-data { text-align: center; padding: 30px; color: #64748b; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h3 style="margin:0;">مراقب تاسي (TASI)</h3>
-    <div id="status" style="font-size: 11px; color: #94a3b8; margin-top: 5px;">جاري تشغيل محرك البيانات...</div>
+<div class="radar-header">
+    <h2 style="margin:0;">رادار الفرص الإيجابية</h2>
+    <div class="counter" id="stockCount">--</div>
+    <div style="font-size:12px; color:#94a3b8;">شركات حققت تقاطع 20/50 والسعر فوق متوسط 20</div>
 </div>
 
-<input type="text" id="search" onkeyup="drawTable()" placeholder="ابحث برقم الشركة..." class="search-box">
-
-<div id="loader">
-    جاري جلب 269 شركة لأول مرة...<br>
-    <small style="color:#94a3b8; font-weight: normal;">يرجى الانتظار 15 ثانية، الصفحة ستحدث نفسها</small>
-</div>
+<div id="loader">جاري تحليل 269 شركة بحثاً عن فرص...</div>
+<div id="noData" class="no-data" style="display:none;">لا توجد شركات تحقق الاستراتيجية حالياً</div>
 
 <table id="mainTable" style="display:none;">
     <thead>
         <tr>
-            <th>الرمز</th>
+            <th>الشركة</th>
             <th>السعر</th>
-            <th>التغير</th>
+            <th>التغير اليومي</th>
         </tr>
     </thead>
     <tbody id="tableBody"></tbody>
 </table>
 
 <script>
-    let stocksData = [];
-
-    async function loadData() {
-        const loader = document.getElementById('loader');
-        const status = document.getElementById('status');
+    async function updateRadar() {
         try {
             const res = await fetch('/api/data');
-            const result = await res.json();
+            const data = await res.json();
             
-            if (result.updated) {
-                stocksData = result.stocks;
-                loader.style.display = 'none';
-                document.getElementById('mainTable').style.display = 'table';
-                status.innerText = `تحديث مباشر لـ ${stocksData.length} شركة`;
-                drawTable();
-            } else {
-                // إذا لم تجهز البيانات بعد، حاول مرة أخرى كل 5 ثوانٍ
-                setTimeout(loadData, 5000);
-            }
-        } catch (e) {
-            setTimeout(loadData, 5000);
-        }
+            if (data.updated) {
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('stockCount').innerText = data.count;
+                
+                if (data.count === 0) {
+                    document.getElementById('noData').style.display = 'block';
+                    document.getElementById('mainTable').style.display = 'none';
+                } else {
+                    document.getElementById('noData').style.display = 'none';
+                    document.getElementById('mainTable').style.display = 'table';
+                    const tbody = document.getElementById('tableBody');
+                    tbody.innerHTML = '';
+                    
+                    data.stocks.forEach(s => {
+                        tbody.innerHTML += `<tr>
+                            <td class="sym">${s.s}</td>
+                            <td style="font-family:monospace;">${s.p}</td>
+                            <td class="change" style="color:${s.pc >= 0 ? '#4ade80' : '#f87171'}">${s.pc}%</td>
+                        </tr>`;
+                    });
+                }
+            } else { setTimeout(updateRadar, 5000); }
+        } catch (e) { setTimeout(updateRadar, 5000); }
     }
-
-    function drawTable() {
-        const query = document.getElementById('search').value;
-        const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '';
-
-        const filtered = stocksData.filter(item => item.s.includes(query));
-
-        filtered.forEach(item => {
-            const row = `<tr>
-                <td class="symbol">${item.s}</td>
-                <td style="font-family:monospace;">${item.p.toFixed(2)}</td>
-                <td class="${item.c >= 0 ? 'up-val' : 'down-val'}">
-                    ${item.c > 0 ? '+' : ''}${item.c.toFixed(2)} (${item.pc.toFixed(2)}%)
-                </td>
-            </tr>`;
-            tbody.innerHTML += row;
-        });
-    }
-
-    loadData(); // أول تشغيل
-    setInterval(loadData, 60000); // تحديث صامت كل دقيقة
+    updateRadar();
+    setInterval(updateRadar, 300000); // تحديث صامت كل 5 دقائق
 </script>
-
 </body>
 </html>
