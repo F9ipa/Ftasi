@@ -3,149 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مراقب تاسي - الوضع الداكن</title>
+    <title>TASI Tracker Pro</title>
     <style>
-        /* إعدادات الألوان الأساسية للوضع الداكن */
-        :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --text-main: #f8fafc;
-            --text-dim: #94a3b8;
-            --accent: #38bdf8;
-            --up-color: #4ade80;
-            --down-color: #f87171;
-            --border-color: #334155;
-        }
-
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background-color: var(--bg-color); 
-            color: var(--text-main);
-            margin: 0; 
-            padding: 15px; 
-        }
-
-        .header { 
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            color: var(--accent); 
-            padding: 20px; 
-            border-radius: 12px; 
-            text-align: center; 
-            margin-bottom: 20px; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            border: 1px solid var(--border-color);
-        }
-
-        .card { 
-            background: var(--card-bg); 
-            border-radius: 12px; 
-            padding: 15px; 
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-            border: 1px solid var(--border-color);
-        }
-
-        .search-box { 
-            width: 100%; 
-            padding: 12px; 
-            margin-bottom: 20px; 
-            border: 1px solid var(--border-color); 
-            border-radius: 8px; 
-            box-sizing: border-box; 
-            background-color: var(--bg-color);
-            color: white;
-            font-size: 16px;
-            outline: none;
-        }
-
-        .search-box:focus {
-            border-color: var(--accent);
-        }
-
-        table { width: 100%; border-collapse: collapse; }
-        
-        th { 
-            color: var(--text-dim); 
-            padding: 12px; 
-            text-align: right; 
-            border-bottom: 1px solid var(--border-color); 
-            font-size: 13px;
-            text-transform: uppercase;
-        }
-
-        td { 
-            padding: 15px 12px; 
-            border-bottom: 1px solid var(--border-color); 
-            font-size: 15px; 
-        }
-
-        .symbol { font-weight: bold; color: var(--accent); }
-        .price { font-weight: 600; font-family: monospace; font-size: 16px; }
-        
-        /* ألوان التغيير في الوضع الداكن */
-        .change-up { color: var(--up-color); font-weight: bold; }
-        .change-down { color: var(--down-color); font-weight: bold; }
-        
-        /* تأثير عند تمرير الماوس أو اللمس */
-        tr:hover { background-color: rgba(255,255,255,0.03); }
+        :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --accent: #38bdf8; }
+        body { font-family: system-ui; background: var(--bg); color: var(--text); margin: 0; padding: 10px; }
+        .search-box { width: 100%; padding: 12px; background: var(--card); border: 1px solid #334155; border-radius: 8px; color: white; margin-bottom: 10px; box-sizing: border-box; }
+        .status { font-size: 11px; color: #94a3b8; margin-bottom: 10px; text-align: center; }
+        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 8px; overflow: hidden; }
+        th { background: #1e293b; padding: 12px; font-size: 12px; border-bottom: 1px solid #334155; }
+        td { padding: 12px; border-bottom: 1px solid #0f172a; text-align: center; font-size: 14px; }
+        .up { color: #4ade80; } .down { color: #f87171; }
+        #loading { text-align: center; padding: 20px; color: var(--accent); }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h2 style="margin:0; letter-spacing: 1px;">مراقب تاسي (TASI)</h2>
-    <div style="color: var(--text-dim); font-size: 12px; margin-top: 5px;">تحديث مباشر • Yahoo Finance</div>
+<div style="text-align:center; padding:10px;">
+    <h3 style="margin:0; color:var(--accent)">مراقب السوق السعودي الكامل</h3>
+    <div class="status" id="lastUpdate">جاري جلب 269 شركة...</div>
 </div>
 
-<div class="card">
-    <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="ابحث عن شركة أو رمز..." class="search-box">
-    
-    <table id="stockTable">
-        <thead>
-            <tr>
-                <th>الرمز</th>
-                <th>الشركة</th>
-                <th>السعر</th>
-                <th>التغير</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for s in stocks %}
-            <tr>
-                <td class="symbol">{{ s.symbol }}</td>
-                <td style="color: var(--text-main);">{{ s.lNameAr }}</td>
-                <td class="price">{{ s.lastTradePrice }}</td>
-                <td class="{{ 'change-up' if s.change > 0 else 'change-down' if s.change < 0 else '' }}">
-                    {{ '+' if s.change > 0 }}{{ s.change }} ({{ s.pctChange }}%)
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<input type="text" id="search" onkeyup="renderTable()" placeholder="ابحث بالرمز أو السعر..." class="search-box">
+
+<div id="loading">انتظر قليلاً، يتم الآن معالجة بيانات تاسي...</div>
+
+<table id="stockTable" style="display:none;">
+    <thead>
+        <tr>
+            <th>الرمز</th>
+            <th>السعر</th>
+            <th>التغير</th>
+        </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+</table>
 
 <script>
-function filterTable() {
-    var input, filter, table, tr, td, i, j, txtValue;
-    input = document.getElementById("searchInput");
-    filter = input.value.toUpperCase();
-    table = document.getElementById("stockTable");
-    tr = table.getElementsByTagName("tr");
+    let allStocks = [];
 
-    for (i = 1; i < tr.length; i++) {
-        tr[i].style.display = "none";
-        td = tr[i].getElementsByTagName("td");
-        for (j = 0; j < td.length; j++) {
-            if (td[j]) {
-                txtValue = td[j].textContent || td[j].innerText;
-                if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                    tr[i].style.display = "";
-                    break;
-                }
-            }
+    async function fetchData() {
+        try {
+            const response = await fetch('/api/data');
+            allStocks = await response.json();
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('stockTable').style.display = 'table';
+            document.getElementById('lastUpdate').innerText = `تم تحديث ${allStocks.length} شركة بنجاح`;
+            renderTable();
+        } catch (e) {
+            document.getElementById('loading').innerText = "خطأ في الاتصال بالسيرفر";
         }
     }
-}
-</script>
 
+    function renderTable() {
+        const query = document.getElementById('search').value.toUpperCase();
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+
+        const filtered = allStocks.filter(s => s.s.includes(query));
+
+        filtered.forEach(stock => {
+            const row = `<tr>
+                <td style="color:var(--accent); font-weight:bold;">${stock.s}</td>
+                <td>${stock.p}</td>
+                <td class="${stock.c >= 0 ? 'up' : 'down'}">
+                    ${stock.c > 0 ? '+' : ''}${stock.c} (${stock.pc}%)
+                </td>
+            </tr>`;
+            tbody.innerHTML += row;
+        });
+    }
+
+    fetchData();
+</script>
 </body>
 </html>
