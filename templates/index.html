@@ -3,38 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>رادار اختراقات تاسي</title>
+    <title>رادار تاسي</title>
     <style>
         :root { --bg: #020617; --card: #0f172a; --gold: #f59e0b; --text: #f1f5f9; }
-        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
-        .radar-header { text-align: center; padding: 20px; background: var(--card); border-radius: 15px; border: 1px solid var(--gold); margin-bottom: 20px; }
-        .counter { font-size: 40px; font-weight: bold; color: var(--gold); margin: 10px 0; }
-        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
-        th { background: #1e293b; padding: 12px; color: #94a3b8; font-size: 13px; }
-        td { padding: 16px 10px; border-bottom: 1px solid #1e293b; text-align: center; }
-        .sym { font-weight: bold; color: #38bdf8; }
-        .change { font-weight: bold; }
-        #loader { text-align: center; padding: 50px; color: var(--gold); }
-        .no-data { text-align: center; padding: 30px; color: #64748b; }
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); padding: 15px; text-align: center; }
+        .radar-header { padding: 20px; background: var(--card); border-radius: 15px; border: 1px solid var(--gold); margin-bottom: 20px; }
+        .counter { font-size: 45px; font-weight: bold; color: var(--gold); }
+        .status { font-size: 14px; color: #94a3b8; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; margin-top: 20px; }
+        th { background: #1e293b; padding: 12px; font-size: 13px; color: #94a3b8; }
+        td { padding: 15px; border-bottom: 1px solid #1e293b; }
+        .sym { color: #38bdf8; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="radar-header">
     <h2 style="margin:0;">رادار الفرص الإيجابية</h2>
-    <div class="counter" id="stockCount">--</div>
-    <div style="font-size:12px; color:#94a3b8;">شركات حققت تقاطع 20/50 والسعر فوق متوسط 20</div>
+    <div class="counter" id="stockCount">0</div>
+    <div id="loaderStatus" class="status">جاري قراءة ملف الشركات...</div>
 </div>
-
-<div id="loader">جاري تحليل 269 شركة بحثاً عن فرص...</div>
-<div id="noData" class="no-data" style="display:none;">لا توجد شركات تحقق الاستراتيجية حالياً</div>
 
 <table id="mainTable" style="display:none;">
     <thead>
         <tr>
             <th>الشركة</th>
             <th>السعر</th>
-            <th>التغير اليومي</th>
+            <th>التغير</th>
         </tr>
     </thead>
     <tbody id="tableBody"></tbody>
@@ -46,32 +41,32 @@
             const res = await fetch('/api/data');
             const data = await res.json();
             
-            if (data.updated) {
-                document.getElementById('loader').style.display = 'none';
-                document.getElementById('stockCount').innerText = data.count;
-                
-                if (data.count === 0) {
-                    document.getElementById('noData').style.display = 'block';
-                    document.getElementById('mainTable').style.display = 'none';
-                } else {
-                    document.getElementById('noData').style.display = 'none';
-                    document.getElementById('mainTable').style.display = 'table';
-                    const tbody = document.getElementById('tableBody');
-                    tbody.innerHTML = '';
-                    
-                    data.stocks.forEach(s => {
-                        tbody.innerHTML += `<tr>
-                            <td class="sym">${s.s}</td>
-                            <td style="font-family:monospace;">${s.p}</td>
-                            <td class="change" style="color:${s.pc >= 0 ? '#4ade80' : '#f87171'}">${s.pc}%</td>
-                        </tr>`;
-                    });
-                }
-            } else { setTimeout(updateRadar, 5000); }
-        } catch (e) { setTimeout(updateRadar, 5000); }
+            document.getElementById('stockCount').innerText = data.count;
+
+            if (data.loading) {
+                document.getElementById('loaderStatus').innerText = 
+                    `جاري تحليل ${data.total} شركة... (تم فحص ${data.progress})`;
+            } else {
+                document.getElementById('loaderStatus').innerText = 
+                    `تم فحص كامل السوق (${data.total} شركة)`;
+            }
+
+            if (data.stocks.length > 0) {
+                document.getElementById('mainTable').style.display = 'table';
+                const tbody = document.getElementById('tableBody');
+                tbody.innerHTML = '';
+                data.stocks.forEach(s => {
+                    tbody.innerHTML += `<tr>
+                        <td class="sym">${s.s}</td>
+                        <td>${s.p}</td>
+                        <td style="color:${s.pc >= 0 ? '#4ade80' : '#f87171'}">${s.pc}%</td>
+                    </tr>`;
+                });
+            }
+        } catch (e) { console.log("Waiting for server..."); }
     }
+    setInterval(updateRadar, 4000);
     updateRadar();
-    setInterval(updateRadar, 300000); // تحديث صامت كل 5 دقائق
 </script>
 </body>
 </html>
