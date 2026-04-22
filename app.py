@@ -6,6 +6,7 @@ import os
 
 app = Flask(__name__)
 
+# تحويل البيانات إلى هايكن آشي
 def get_heikin_ashi(df):
     try:
         ha_df = df.copy()
@@ -18,9 +19,9 @@ def get_heikin_ashi(df):
         ha_df['High'] = ha_df[['High', 'Open', 'Close']].max(axis=1)
         ha_df['Low'] = ha_df[['Low', 'Open', 'Close']].min(axis=1)
         return ha_df
-    except:
-        return df
+    except: return df
 
+# حساب مؤشر WaveTrend
 def calculate_wavetrend(df, n1=10, n2=21):
     ap = (df['High'] + df['Low'] + df['Close']) / 3
     esa = ap.ewm(span=n1, adjust=False).mean()
@@ -31,55 +32,46 @@ def calculate_wavetrend(df, n1=10, n2=21):
     return wt1, wt2
 
 def get_signals():
-    # قائمة أسهم افتراضية قوية لضمان العمل
+    # الرموز الأساسية (تاسي، تبوك الزراعية، الراجحي، أرامكو)
     symbols = ["^TASI", "6040.SR", "1120.SR", "2222.SR"]
     
+    # محاولة إضافة رموز من الملف الخارجي
     if os.path.exists('symbols.txt'):
-        with open('symbols.txt', 'r') as f:
-            user_symbols = [line.strip() for line in f.readlines() if line.strip()]
-            if user_symbols: symbols = user_symbols
-    
+        try:
+            with open('symbols.txt', 'r') as f:
+                extra = [l.strip() for l in f.readlines() if l.strip()]
+                if extra: symbols = list(set(symbols + extra))
+        except: pass
+
     results = []
-    errors = []
+    error_log = []
 
     for symbol in symbols:
         try:
-            # جلب البيانات بفاصل شهري
-            data = yf.download(symbol, period="max", interval="1mo", progress=False)
+            # جلب بيانات شهرية لمدة سنتين لسرعة الأداء
+            data = yf.download(symbol, period="5y", interval="1mo", progress=False, timeout=15)
             
-            if data.empty or len(data) < 10:
-                errors.append(f"لا توجد بيانات كافية للسهم: {symbol}")
+            if data is None or data.empty or len(data) < 20:
+                error_log.append(f"بيانات غير كافية للسهم: {symbol}")
                 continue
 
             ha_data = get_heikin_ashi(data)
             wt1, wt2 = calculate_wavetrend(ha_data)
             
-            curr_wt1 = float(wt1.iloc[-1])
-            curr_wt2 = float(wt2.iloc[-1])
-            prev_wt1 = float(wt1.iloc[-2])
-            prev_wt2 = float(wt2.iloc[-2])
+            c_wt1, c_wt2 = float(wt1.iloc[-1]), float(wt2.iloc[-1])
+            p_wt1, p_wt2 = float(wt1.iloc[-2]), float(wt2.iloc[-2])
 
-            signal = "انتظار"
-            color = "#95a5a6"
-            
-            if prev_wt1 <= prev_wt2 and curr_wt1 > curr_wt2:
-                signal = "إيجابي (قيد التشكل)"
-                color = "#2ecc71"
-            elif prev_wt1 >= prev_wt2 and curr_wt1 < curr_wt2:
-                signal = "سلبي (قيد التشكل)"
-                color = "#e74c3c"
+            signal, color = "انتظار", "#95a5a6"
+            if p_wt1 <= p_wt2 and c_wt1 > c_wt2:
+                signal, color = "إيجابي (قيد التشكل)", "#2ecc71"
+            elif p_wt1 >= p_wt2 and c_wt1 < c_wt2:
+                signal, color = "سلبي (قيد التشكل)", "#e74c3c"
 
-            results.append({
-                'symbol': symbol,
-                'wt1': round(curr_wt1, 2),
-                'wt2': round(curr_wt2, 2),
-                'signal': signal,
-                'color': color
-            })
+            results.append({'symbol': symbol, 'wt1': round(c_wt1, 2), 'wt2': round(c_wt2, 2), 'signal': signal, 'color': color})
         except Exception as e:
-            errors.append(f"خطأ في {symbol}: {str(e)}")
+            error_log.append(f"خطأ تقني في {symbol}: {str(e)}")
             
-    return results, errors
+    return results, error_log
 
 @app.route('/')
 def index():
