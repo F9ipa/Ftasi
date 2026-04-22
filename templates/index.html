@@ -3,31 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TASI Tracker Pro</title>
+    <title>TASI Dark Monitor</title>
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --accent: #38bdf8; }
-        body { font-family: system-ui; background: var(--bg); color: var(--text); margin: 0; padding: 10px; }
-        .search-box { width: 100%; padding: 12px; background: var(--card); border: 1px solid #334155; border-radius: 8px; color: white; margin-bottom: 10px; box-sizing: border-box; }
-        .status { font-size: 11px; color: #94a3b8; margin-bottom: 10px; text-align: center; }
-        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 8px; overflow: hidden; }
-        th { background: #1e293b; padding: 12px; font-size: 12px; border-bottom: 1px solid #334155; }
-        td { padding: 12px; border-bottom: 1px solid #0f172a; text-align: center; font-size: 14px; }
-        .up { color: #4ade80; } .down { color: #f87171; }
-        #loading { text-align: center; padding: 20px; color: var(--accent); }
+        :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --accent: #38bdf8; --up: #4ade80; --down: #f87171; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        .header { text-align: center; padding: 20px; background: var(--card); border-radius: 12px; margin-bottom: 15px; border: 1px solid #334155; }
+        .search-box { width: 100%; padding: 15px; background: var(--card); border: 1px solid #334155; border-radius: 10px; color: white; margin-bottom: 15px; box-sizing: border-box; font-size: 16px; outline: none; }
+        .search-box:focus { border-color: var(--accent); }
+        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
+        th { background: #1e293b; padding: 12px; color: #94a3b8; font-size: 13px; border-bottom: 1px solid #334155; }
+        td { padding: 15px 10px; border-bottom: 1px solid #0f172a; text-align: center; }
+        .up-val { color: var(--up); font-weight: bold; }
+        .down-val { color: var(--down); font-weight: bold; }
+        #loader { text-align: center; padding: 40px; color: var(--accent); font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div style="text-align:center; padding:10px;">
-    <h3 style="margin:0; color:var(--accent)">مراقب السوق السعودي الكامل</h3>
-    <div class="status" id="lastUpdate">جاري جلب 269 شركة...</div>
+<div class="header">
+    <h2 style="margin:0;">مراقب تاسي الذكي</h2>
+    <div id="status" style="font-size: 12px; color: #94a3b8; margin-top: 5px;">جاري الاتصال بالسيرفر...</div>
 </div>
 
-<input type="text" id="search" onkeyup="renderTable()" placeholder="ابحث بالرمز أو السعر..." class="search-box">
+<input type="text" id="search" onkeyup="drawTable()" placeholder="ابحث برقم الشركة (مثلاً: 2222)..." class="search-box">
 
-<div id="loading">انتظر قليلاً، يتم الآن معالجة بيانات تاسي...</div>
+<div id="loader">يتم الآن جلب بيانات 269 شركة...<br><small style="color:#94a3b8">قد يستغرق أول تحميل 20 ثانية</small></div>
 
-<table id="stockTable" style="display:none;">
+<table id="mainTable" style="display:none;">
     <thead>
         <tr>
             <th>الرمز</th>
@@ -39,41 +41,49 @@
 </table>
 
 <script>
-    let allStocks = [];
+    let stocksData = [];
 
-    async function fetchData() {
+    async function loadData() {
+        const loader = document.getElementById('loader');
+        const status = document.getElementById('status');
         try {
-            const response = await fetch('/api/data');
-            allStocks = await response.json();
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('stockTable').style.display = 'table';
-            document.getElementById('lastUpdate').innerText = `تم تحديث ${allStocks.length} شركة بنجاح`;
-            renderTable();
+            const res = await fetch('/api/data');
+            if (!res.ok) throw new Error();
+            stocksData = await res.json();
+            
+            loader.style.display = 'none';
+            document.getElementById('mainTable').style.display = 'table';
+            status.innerText = `تحديث مباشر لـ ${stocksData.length} شركة`;
+            drawTable();
         } catch (e) {
-            document.getElementById('loading').innerText = "خطأ في الاتصال بالسيرفر";
+            loader.innerHTML = `خطأ في الاتصال.. <button onclick="location.reload()" style="background:var(--accent); border:none; padding:8px 15px; border-radius:5px; color:white; font-weight:bold;">إعادة محاولة</button>`;
         }
     }
 
-    function renderTable() {
-        const query = document.getElementById('search').value.toUpperCase();
+    function drawTable() {
+        const query = document.getElementById('search').value;
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
 
-        const filtered = allStocks.filter(s => s.s.includes(query));
+        const filtered = stocksData.filter(item => item.s.includes(query));
 
-        filtered.forEach(stock => {
+        filtered.forEach(item => {
             const row = `<tr>
-                <td style="color:var(--accent); font-weight:bold;">${stock.s}</td>
-                <td>${stock.p}</td>
-                <td class="${stock.c >= 0 ? 'up' : 'down'}">
-                    ${stock.c > 0 ? '+' : ''}${stock.c} (${stock.pc}%)
+                <td style="color:var(--accent); font-weight:bold;">${item.s}</td>
+                <td style="font-family:monospace; font-size:16px;">${item.p}</td>
+                <td class="${item.c >= 0 ? 'up-val' : 'down-val'}">
+                    ${item.c > 0 ? '+' : ''}${item.c} (${item.pc}%)
                 </td>
             </tr>`;
             tbody.innerHTML += row;
         });
     }
 
-    fetchData();
+    // جلب البيانات عند فتح الصفحة
+    loadData();
+    // تحديث البيانات تلقائياً كل دقيقتين
+    setInterval(loadData, 120000);
 </script>
+
 </body>
 </html>
