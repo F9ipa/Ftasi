@@ -1,63 +1,35 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ماسح WaveTrend | FARES_vip</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>تاسي - فلتر WaveTrend</title>
     <style>
-        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .container { margin-top: 50px; }
-        .card { border: none; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        .header-section { background: linear-gradient(45deg, #1a2a6c, #b21f1f, #fdbb2d); color: white; padding: 30px; border-radius: 15px 15px 0 0; }
-        .status-positive { color: #28a745; font-weight: bold; }
-        .status-neutral { color: #6c757d; }
-        table { background: white; }
+        body { font-family: Arial; direction: rtl; text-align: center; background: #f4f4f4; }
+        table { margin: 20px auto; border-collapse: collapse; width: 80%; background: white; }
+        th, td { border: 1px solid #ddd; padding: 12px; }
+        th { background: #333; color: white; }
+        .buy { color: green; font-weight: bold; }
+        .sell { color: red; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="card">
-            <div class="header-section text-center">
-                <h2>📊 نظام فلترة الأسهم الذكي</h2>
-                <p>مؤشر WaveTrend - إغلاقات أسبوعية وشهرية</p>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover text-center">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>الرمز</th>
-                                <th>السعر الحالي</th>
-                                <th>الفريم الأسبوعي</th>
-                                <th>الفريم الشهري</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for stock in stocks %}
-                            <tr>
-                                <td><strong>{{ stock.symbol }}</strong></td>
-                                <td>{{ stock.price }}</td>
-                                <td class="{{ 'status-positive' if '✅' in stock.weekly else 'status-neutral' }}">
-                                    {{ stock.weekly }}
-                                </td>
-                                <td class="{{ 'status-positive' if '✅' in stock.monthly else 'status-neutral' }}">
-                                    {{ stock.monthly }}
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="4" class="text-muted">لا توجد أسهم تطابق الشروط حالياً أو جاري الفحص...</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="card-footer text-center text-muted">
-                آخر تحديث: 22 أبريل 2026
-            </div>
-        </div>
-    </div>
+    <h2>نتائج فلتر WaveTrend للسوق السعودي</h2>
+    <table>
+        <tr>
+            <th>الرمز</th>
+            <th>WT1</th>
+            <th>WT2</th>
+            <th>الإشارة</th>
+        </tr>
+        {% for stock in stocks %}
+        <tr>
+            <td>{{ stock.symbol }}</td>
+            <td>{{ stock.wt1 }}</td>
+            <td>{{ stock.wt2 }}</td>
+            <td class="{{ 'buy' if 'Buy' in stock.signal else 'sell' if 'Sell' in stock.signal else '' }}">
+                {{ stock.signal }}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
 </body>
 </html>
