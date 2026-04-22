@@ -6,28 +6,25 @@ import os
 
 app = Flask(__name__)
 
-# 1. دالة تحويل الشموع العادية إلى Heikin-Ashi
 def get_heikin_ashi(df):
-    ha_df = df.copy()
-    # إغلاق هايكن آشي: (Open+High+Low+Close) / 4
-    ha_df['Close'] = (df['Open'] + df['High'] + df['Low'] + df['Close']) / 4
-    
-    # افتتاح هايكن آشي: متوسط (افتتاح السابقة + إغلاق السابقة)
-    # نحتاج لحلقة بسيطة لحسابها لأن كل شمعة تعتمد على ما قبلها
-    ha_open = [(df['Open'].iloc[0] + df['Close'].iloc[0]) / 2]
-    for i in range(1, len(df)):
-        ha_open.append((ha_open[i-1] + ha_df['Close'].iloc[i-1]) / 2)
-    ha_df['Open'] = ha_open
-    
-    # أعلى وأدنى هايكن آشي
-    ha_df['High'] = ha_df[['High', 'Open', 'Close']].max(axis=1)
-    ha_df['Low'] = ha_df[['Low', 'Open', 'Close']].min(axis=1)
-    
-    return ha_df
+    try:
+        ha_df = df.copy()
+        ha_df['Close'] = (df['Open'] + df['High'] + df['Low'] + df['Close']) / 4
+        
+        ha_open = np.zeros(len(df))
+        ha_open[0] = (df['Open'].iloc[0] + df['Close'].iloc[0]) / 2
+        for i in range(1, len(df)):
+            ha_open[i] = (ha_open[i-1] + ha_df['Close'].iloc[i-1]) / 2
+        ha_df['Open'] = ha_open
+        
+        ha_df['High'] = ha_df[['High', 'Open', 'Close']].max(axis=1)
+        ha_df['Low'] = ha_df[['Low', 'Open', 'Close']].min(axis=1)
+        return ha_df
+    except Exception as e:
+        print(f"HA calculation error: {e}")
+        return df
 
-# 2. حساب WaveTrend باستخدام قيم Heikin-Ashi
 def calculate_wavetrend(df, n1=10, n2=21):
-    # استخدام hlc3 من قيم هايكن آشي المحسوبة
     ap = (df['High'] + df['Low'] + df['Close']) / 3
     esa = ap.ewm(span=n1, adjust=False).mean()
     d = (ap - esa).abs().ewm(span=n1, adjust=False).mean()
@@ -37,27 +34,31 @@ def calculate_wavetrend(df, n1=10, n2=21):
     return wt1, wt2
 
 def get_signals():
-    default_symbols = ["^TASI", "6040.SR", "1120.SR", "2222.SR"]
+    # قائمة أساسية لضمان عمل الصفحة حتى لو لم يرفع المستخدم ملف
+    symbols = ["^TASI", "6040.SR", "1120.SR", "2222.SR"]
     
-    symbols = []
     if os.path.exists('symbols.txt'):
         with open('symbols.txt', 'r') as f:
-            symbols = [line.strip() for line in f.readlines() if line.strip()]
-    
-    if not symbols:
-        symbols = default_symbols
+            user_symbols = [line.strip() for line in f.readlines() if line.strip()]
+            if user_symbols: symbols = user_symbols
     
     results = []
     for symbol in symbols:
         try:
-            data = yf.download(symbol, period="5y", interval="1mo", progress=False)
-            if data.empty or len(data) < 30: continue
+            # زيادة محاولات الجلب وضبط الخيارات لبيئة Render
+            data = yf.download(symbol, period="10y", interval="1mo", progress=False, timeout=10)
+            
+            if data.empty or len(data) < 30:
+                print(f"No enough data for {symbol}")
+                continue
 
-            # --- التحويل إلى هايكن آشي أولاً ---
             ha_data = get_heikin_ashi(data)
-            # --- حساب المؤشر بناءً على هايكن آشي ---
             wt1, wt2 = calculate_wavetrend(ha_data)
             
+            # التأكد من عدم وجود قيم NaN في آخر النتائج
+            if pd.isna(wt1.iloc[-1]) or pd.isna(wt2.iloc[-1]):
+                continue
+
             curr_wt1 = float(wt1.iloc[-1])
             curr_wt2 = float(wt2.iloc[-1])
             prev_wt1 = float(wt1.iloc[-2])
@@ -66,17 +67,17 @@ def get_signals():
             p_prev_wt2 = float(wt2.iloc[-3])
 
             signal = "انتظار"
-            color = "gray"
+            color = "#95a5a6" # رمادي
             
             if prev_wt1 <= prev_wt2 and curr_wt1 > curr_wt2:
                 signal = "إيجابي (HA لحظي)"
-                color = "#2ecc71"
+                color = "#2ecc71" # أخضر
             elif p_prev_wt1 <= p_prev_wt2 and prev_wt1 > prev_wt2:
                 signal = "إيجابي مؤكد (HA)"
-                color = "#27ae60"
+                color = "#27ae60" # أخضر غامق
             elif prev_wt1 >= prev_wt2 and curr_wt1 < curr_wt2:
                 signal = "سلبي (HA لحظي)"
-                color = "#e74c3c"
+                color = "#e74c3c" # أحمر
 
             results.append({
                 'symbol': symbol,
@@ -86,7 +87,7 @@ def get_signals():
                 'color': color
             })
         except Exception as e:
-            print(f"Error with {symbol}: {e}")
+            print(f"Error processing {symbol}: {str(e)}")
             
     return results
 
