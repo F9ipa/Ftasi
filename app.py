@@ -3,70 +3,42 @@ import requests
 import pandas as pd
 import time
 
-st.set_page_config(page_title="رادار تاسي الذكي", layout="wide")
-
-# تصميم الواجهة لتناسب الجوال (RTL)
-st.markdown("""<style> .main { text-align: right; direction: rtl; } </style>""", unsafe_allow_html=True)
-
-st.title("📈 رادار السوق السعودي")
-
-def fetch_data_with_progress():
+def fetch_data_safe():
+    # الرابط الدولي للسكرينر
     url = "https://scanner.tradingview.com/saudi/scan"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    
+    # Headers احترافية وشاملة لتجنب حظر سيرفرات Render
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/plain, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
+        "Origin": "https://www.tradingview.com",
+        "Referer": "https://www.tradingview.com/"
+    }
     
     payload = {
         "filter": [{"left": "type", "operation": "in_range", "right": ["stock", "dr", "fund"]}],
         "markets": ["saudi"],
+        "symbols": {"query": {"types": []}, "tickers": []},
         "columns": ["name", "description", "close", "change", "RSI", "EMA20"],
-        "range": [0, 100] # سنجلب 100 شركة كمثال للسرعة
+        "sort": {"sortBy": "change", "sortOrder": "desc"},
+        "range": [0, 150]
     }
 
-    # إعداد شريط التقدم والوقت
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    start_time = time.time()
-
-    # محاكاة العداد (لأن طلب الـ API يأتي دفعة واحدة، سنقسم العرض ليعطي شعور العداد)
-    for i in range(1, 101):
-        # في المنتصف نقوم بطلب البيانات الفعلي
-        if i == 50:
-            try:
-                response = requests.post(url, json=payload, headers=headers, timeout=10)
-                raw_data = response.json()
-            except:
-                st.error("خطأ في الاتصال بالسيرفر")
-                return None
-
-        # حساب الوقت
-        current_time = time.time()
-        elapsed_time = current_time - start_time
-        # تقدير الوقت المتبقي (بناءً على سرعة العداد)
-        remaining_time = (elapsed_time / i) * (100 - i) if i > 0 else 0
+    try:
+        # زيادة timeout لـ 30 ثانية لأن سيرفرات Render المجانية قد تكون بطيئة في الاتصال
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
         
-        # تحديث شريط التقدم
-        progress_bar.progress(i)
-        status_text.text(f"جاري التحميل: {i}% | المستغرق: {elapsed_time:.1f}ث | المتبقي: {remaining_time:.1f}ث")
-        
-        # سرعة العداد (يمكنك تقليلها ليصبح العداد أسرع)
-        time.sleep(0.02)
+        # إذا أعاد السيرفر خطأ 403 (حظر) أو غيره
+        if response.status_code != 200:
+            st.error(f"رفض السيرفر الطلب (Error {response.status_code}). جرب تحديث الصفحة بعد قليل.")
+            return None
+            
+        return response.json()
+    except requests.exceptions.Timeout:
+        st.error("انتهى وقت المحاولة (Timeout). السيرفر استغرق وقتاً طويلاً للرد.")
+    except Exception as e:
+        st.error(f"حدث خطأ غير متوقع: {e}")
+    return None
 
-    return raw_data
-
-if st.button('بدء عملية الفحص الفني 🔍'):
-    data = fetch_data_with_progress()
-    
-    if data and 'data' in data:
-        rows = []
-        for item in data['data']:
-            d = item['d']
-            rows.append({
-                "الرمز": item['s'].split(':')[1],
-                "الشركة": d[1],
-                "السعر": d[2],
-                "RSI": round(d[4], 2) if d[4] else 0,
-                "الحالة": "✅ صاعد" if d[2] > d[5] else "⚠️ هابط"
-            })
-        
-        df = pd.DataFrame(rows)
-        st.success("✅ اكتمل التحليل")
-        st.table(df) # استخدام table بدلاً من dataframe لضمان الثبات في الخلفية
+# --- بقية كود Streamlit (الواجهة والعداد) ---
