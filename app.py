@@ -1,54 +1,37 @@
 import requests
-import json
+from flask import Flask
+import os
+
+app = Flask(__name__)
 
 def run_tasi_radar():
     url = "https://scanner.tradingview.com/ksa/scan?label-product=screener-stock"
-    
-    # إعداد "الطلب" لفلترة التقاطع مباشرة من خوادم TradingView
     payload = {
-        "columns": ["logoid", "name", "close", "change", "SMA20", "SMA50", "description"],
+        "columns": ["name", "description", "close", "SMA20", "SMA50"],
         "filter": [
-            {
-                "left": "SMA20",
-                "operation": "greater",
-                "right": "SMA50"
-            }
+            {"left": "SMA20", "operation": "greater", "right": "SMA50"}
         ],
-        "ignore_unknown_fields": False,
         "markets": ["ksa"],
-        "options": {"lang": "ar"},
-        "range": [0, 150], # يجلب أول 150 شركة تنطبق عليها الاستراتيجية
-        "sort": {
-            "sortBy": "change",
-            "sortOrder": "desc"
-        }
+        "range": [0, 50]
     }
-
+    headers = {"User-Agent": "Mozilla/5.0"}
+    
     try:
-        response = requests.post(url, json=payload, timeout=15)
-        response.raise_for_status()
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
         data = response.json()
-        
-        stocks = data.get('data', [])
-        
-        print(f"--- رادار الأسهم السعودية (تقاطع 20/50) ---")
-        print(f"تم العثور على {len(stocks)} شركة تنطبق عليها الاستراتيجية:\n")
-        
-        for item in stocks:
-            # d[1] = الاسم، d[2] = الإغلاق، d[4] = متوسط 20، d[5] = متوسط 50
-            name = item['d'][1]
-            description = item['d'][6]
-            close = item['d'][2]
-            sma20 = item['d'][4]
-            sma50 = item['d'][5]
-            
-            print(f"الشركة: {description} ({name})")
-            print(f"   الإغلاق: {close}")
-            print(f"   SMA20: {sma20:.2f} | SMA50: {sma50:.2f}")
-            print("-" * 30)
-            
+        results = []
+        for row in data.get('data', []):
+            results.append(f"✅ {row['d'][1]} ({row['d'][0]}) - السعر: {row['d'][2]}")
+        return results
     except Exception as e:
-        print(f"حدث خطأ أثناء جلب البيانات: {e}")
+        return [f"Error: {str(e)}"]
+
+@app.route('/')
+def index():
+    stocks = run_tasi_radar()
+    return "<br>".join(stocks) if stocks else "لا توجد أسهم تطابق الاستراتيجية حالياً."
 
 if __name__ == "__main__":
-    run_tasi_radar()
+    # هذا السطر يخبر Render أن السيرفر جاهز للاستخدام
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
