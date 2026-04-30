@@ -1,13 +1,13 @@
 import yfinance as yf
 import pandas as pd
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request
 import os
 import concurrent.futures
 
 app = Flask(__name__)
 
-# قائمة شاملة لجميع رموز السوق السعودي (TASI)
-TASI_SYMBOLS = [
+# القائمة الكاملة لجميع رموز تاسي (TASI)
+ALL_TASI = [
     '1010.SR', '1020.SR', '1030.SR', '1050.SR', '1060.SR', '1080.SR', '1111.SR', '1120.SR', '1140.SR', '1150.SR',
     '1180.SR', '1182.SR', '1183.SR', '1201.SR', '1202.SR', '1210.SR', '1211.SR', '1212.SR', '1213.SR', '1214.SR',
     '1301.SR', '1304.SR', '1320.SR', '1321.SR', '1322.SR', '1810.SR', '1830.SR', '1831.SR', '1832.SR', '1833.SR',
@@ -32,6 +32,13 @@ TASI_SYMBOLS = [
     '8230.SR', '8240.SR', '8250.SR', '8260.SR', '8270.SR', '8280.SR', '8300.SR', '8310.SR', '8311.SR', '8312.SR'
 ]
 
+# تقسيم القائمة آلياً إلى 4 مجموعات
+def chunk_list(lst, n):
+    size = len(lst) // n + (len(lst) % n > 0)
+    return [lst[i:i + size] for i in range(0, len(lst), size)]
+
+CHUNKS = chunk_list(ALL_TASI, 4)
+
 def calculate_wavetrend(df):
     if len(df) < 30: return None
     hl3 = (df['High'] + df['Low'] + df['Close']) / 3
@@ -46,35 +53,20 @@ def get_signal(symbol):
     try:
         df = yf.download(symbol, period="3y", interval="1mo", progress=False)
         if df.empty or len(df) < 5: return None
-        
         res = calculate_wavetrend(df)
         if not res: return None
-        
         wt1, wt2 = res
-        curr_wt1, prev_wt1 = wt1.iloc[-1], wt1.iloc[-2]
-        curr_wt2, prev_wt2 = wt2.iloc[-1], wt2.iloc[-2]
+        curr1, prev1, curr2, prev2 = wt1.iloc[-1], wt1.iloc[-2], wt2.iloc[-1], wt2.iloc[-2]
         
-        signal_type = None
-        # شرط التقاطع الإيجابي (دخول)
-        if prev_wt1 <= prev_wt2 and curr_wt1 > curr_wt2:
-            signal_type = "دخول 🟢"
-        # شرط التقاطع السلبي (خروج)
-        elif prev_wt1 >= prev_wt2 and curr_wt1 < curr_wt2:
-            signal_type = "خروج 🔴"
-            
-        if signal_type:
-            last_close = df['Close'].iloc[-1]
-            prev_close = df['Close'].iloc[-2]
-            change = ((last_close - prev_close) / prev_close) * 100
-            return {
-                "name": symbol.replace(".SR", ""),
-                "price": f"{last_close:.2f}",
-                "change": f"{change:.2f}",
-                "signal": signal_type
-            }
-    except:
-        return None
-    return None
+        signal = None
+        if prev1 <= prev2 and curr1 > curr2: signal = "دخول 🟢"
+        elif prev1 >= prev2 and curr1 < curr2: signal = "خروج 🔴"
+        
+        if signal:
+            price = df['Close'].iloc[-1]
+            change = ((price - df['Close'].iloc[-2]) / df['Close'].iloc[-2]) * 100
+            return {"name": symbol.replace(".SR",""), "price": f"{price:.2f}", "change": f"{change:.2f}", "signal": signal}
+    except: return None
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -82,106 +74,50 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>رادار WaveTrend - جميع أسهم تاسي</title>
+    <title>رادار تاسي WaveTrend</title>
     <style>
-        :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --text-color: #f8fafc;
-            --accent-color: #38bdf8;
-            --success-color: #22c55e;
-            --error-color: #ef4444;
-            --border-color: #334155;
-        }
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-            margin: 0;
-            padding: 20px;
-        }
-        .container { max-width: 1000px; margin: auto; }
-        header { 
-            text-align: center; 
-            padding: 20px 0;
-            border-bottom: 2px solid var(--border-color);
-            margin-bottom: 30px;
-        }
-        h1 { color: var(--accent-color); margin: 0; font-size: 1.5rem; }
-        .stats { font-size: 0.9rem; color: #94a3b8; margin-top: 10px; }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--card-bg);
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-        }
-        th, td {
-            padding: 15px;
-            text-align: center;
-            border-bottom: 1px solid var(--border-color);
-        }
-        th { background-color: #334155; color: var(--accent-color); font-weight: 600; }
-        tr:hover { background-color: #2d3748; }
-        
-        .badge-buy {
-            background: #064e3b;
-            color: #4ade80;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            font-weight: bold;
-        }
-        .badge-sell {
-            background: #451a1a;
-            color: #f87171;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            font-weight: bold;
-        }
-        .price { font-weight: bold; color: #f1f5f9; }
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --text: #f8fafc; --success: #22c55e; --danger: #ef4444; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; text-align: center; }
+        .container { max-width: 900px; margin: auto; }
+        .menu { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 30px 0; }
+        .btn { background: var(--card); color: var(--accent); padding: 18px; border: 2px solid var(--accent); border-radius: 12px; text-decoration: none; font-weight: bold; transition: 0.3s; font-size: 1.1rem; }
+        .btn:hover { background: var(--accent); color: var(--bg); transform: translateY(-3px); }
+        .active { background: var(--accent); color: var(--bg); box-shadow: 0 0 15px var(--accent); }
+        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; margin-top: 20px; }
+        th, td { padding: 15px; text-align: center; border-bottom: 1px solid #334155; }
+        th { background: #334155; color: var(--accent); }
+        .buy-row { background: rgba(34, 197, 94, 0.1); color: var(--success); font-weight: bold; }
+        .sell-row { background: rgba(239, 68, 68, 0.1); color: var(--danger); font-weight: bold; }
+        .loading { color: var(--accent); font-style: italic; margin: 20px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>📊 رادار WaveTrend - جميع أسهم تاسي</h1>
-            <p class="stats">فلترة تقاطعات المؤشر على الفاصل الشهري (أوتوماتيكياً)</p>
-        </header>
+        <h1>📊 رادار السوق السعودي (WaveTrend)</h1>
+        <p style="color: #94a3b8;">اختر مجموعة لفلترة الأسهم على الفاصل الشهري</p>
         
-        <table>
-            <thead>
-                <tr>
-                    <th>الرمز</th>
-                    <th>السعر</th>
-                    <th>تغير الشهر الحالي</th>
-                    <th>إشارة WaveTrend</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in stocks %}
-                <tr>
-                    <td><span style="color: var(--accent-color); font-weight: bold;">{{ row.name }}</span></td>
-                    <td class="price">{{ row.price }}</td>
-                    <td style="color: {{ 'var(--success-color)' if row.change|float > 0 else 'var(--error-color)' }}">{{ row.change }}%</td>
-                    <td><span class="{{ 'badge-buy' if 'دخول' in row.signal else 'badge-sell' }}">{{ row.signal }}</span></td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="4" style="text-align:center; padding:40px; color:#64748b;">
-                        لا توجد تقاطعات دخول أو خروج حالياً في كامل السوق لهذا الشهر.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        
-        <footer style="text-align:center; margin-top:30px; color:#64748b; font-size:0.8rem;">
-            يتم فحص أكثر من 200 سهم في سوق تاسي بناءً على إغلاقات الفاصل الشهري.
-        </footer>
+        <div class="menu">
+            <a href="/?part=0" class="btn {{ 'active' if part==0 }}">📦 المجموعة 1 (55 سهم)</a>
+            <a href="/?part=1" class="btn {{ 'active' if part==1 }}">📦 المجموعة 2 (55 سهم)</a>
+            <a href="/?part=2" class="btn {{ 'active' if part==2 }}">📦 المجموعة 3 (55 سهم)</a>
+            <a href="/?part=3" class="btn {{ 'active' if part==3 }}">📦 المجموعة 4 (55 سهم)</a>
+        </div>
+
+        {% if stocks is not none %}
+            <h2>نتائج المجموعة {{ part + 1 }}</h2>
+            <table>
+                <thead><tr><th>الرمز</th><th>السعر</th><th>تغير الشهر</th><th>الإشارة</th></tr></thead>
+                <tbody>
+                    {% for s in stocks %}
+                    <tr class="{{ 'buy-row' if 'دخول' in s.signal else 'sell-row' }}">
+                        <td>{{ s.name }}</td><td>{{ s.price }}</td><td>{{ s.change }}%</td><td>{{ s.signal }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" style="padding:40px; color:#64748b;">لا توجد تقاطعات دخول أو خروج في هذه المجموعة حالياً</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
     </div>
 </body>
 </html>
@@ -189,14 +125,14 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def index():
-    # استخدام 15 خيط متوازي لجعل جلب 200 سهم سريعاً جداً
-    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
-        results = list(executor.map(get_signal, TASI_SYMBOLS))
-    
-    # تصفية الأسهم التي أعطت إشارة فقط
-    stocks = [r for r in results if r is not None]
-    return render_template_string(HTML_TEMPLATE, stocks=stocks)
+    part = request.args.get('part', type=int)
+    stocks = None
+    if part is not None and 0 <= part < len(CHUNKS):
+        # استخدام 20 خيط متوازي للفحص السريع جداً
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            results = list(executor.map(get_signal, CHUNKS[part]))
+        stocks = [r for r in results if r is not None]
+    return render_template_string(HTML_TEMPLATE, stocks=stocks, part=part)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
